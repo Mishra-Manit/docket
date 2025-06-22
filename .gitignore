@@ -1,0 +1,53 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# API Keys and sensitive files
+*/config.py.backup
+**/api_keys.txt
+**/secrets.txt
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+temp/
+tmp/
+output.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python specific (for any Python files in root)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Screenshots (often contain sensitive information)
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Node modules (if any)
+node_modules/
+
+# Virtual environments
+env/
+venv/
+ENV/
+.venv/ 
