@@ -485,6 +485,23 @@ Be very liberal in detecting Trader Joe's references - any mention of "trader", 
                     website_url = f"{website_url}.com"
             target_url = website_url
             spotlight_url = website_url  # Use the website_url for Spotlight
+
+        # --- SIMPLE DEMO FLOW (skips Claude Computer Use) ---
+        if website_url == "traderjoes.com.special":
+            print("🧪 DEMO MODE: Launching simple pyautogui automation (no Claude Computer Use).")
+            # Step 1: small delay so the user can see what's happening
+            time.sleep(3)
+            # Step 2: Open Spotlight
+            pyautogui.hotkey('command', 'space')
+            time.sleep(0.3)
+            # Step 3: Type the target Trader Joe's What's New URL
+            pyautogui.write(target_url)
+            # Step 4: Press return to open the URL
+            pyautogui.press('return')
+            # Step 5: Wait a few seconds for the browser to load
+            time.sleep(4)
+            print(f"🎉 Simple navigation to {target_url} completed.")
+            return []
         
         initial_message = f"""
         I need you to help me navigate to the website "{website_url}" using Spotlight search on macOS. 
@@ -601,17 +618,25 @@ def navigate_to_website():
             
             # First, try to extract website from natural language
             website_url = None
-            
-            # Check if input is already a URL/domain (simple heuristic)
+
+            # Step 1: Does the input already look like a URL or domain?
             url_pattern = r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
             url_match = re.search(url_pattern, user_input)
-            
             if url_match:
-                # Input already looks like a URL/domain
+                # Input already resembles a URL/domain – use it directly.
                 website_url = url_match.group(1)
                 print(f"🔗 Direct URL detected: {website_url}")
-            else:
-                # Try to extract website using Claude
+
+            # Step 2: Heuristic shortcut for Trader Joe's demo if we still don't have a URL
+            if not website_url:
+                lower_input = user_input.lower()
+                trader_terms = ["traderjoes", "trader joe", "trader joe's", "tj's", "tj "]
+                if any(term in lower_input for term in trader_terms):
+                    website_url = "traderjoes.com.special"
+                    print("🤖 Heuristic matched Trader Joe's keywords – skipping Claude extraction.")
+
+            # Step 3: Fallback to Claude extraction when necessary
+            if not website_url:
                 print("🤖 Using Claude to extract website from natural language...")
                 website_url = agent.extract_website_from_text(user_input)
                 
@@ -771,6 +796,18 @@ try:
             _register_dynamic_route(_fname[:-5])
 except FileNotFoundError:
     # TEMP_DIR might not exist yet – ignore
+    pass
+
+# ------------------------------------------------------------
+# Always make sure the /whatsnew endpoint exists – even if the
+# underlying JSON hasn't been scraped yet. The handler will
+# still return 404 until the file appears, but the route is
+# guaranteed to be present so frontend links never break.
+# ------------------------------------------------------------
+try:
+    _register_dynamic_route('whatsnew')
+except Exception:
+    # If registration fails (shouldn't), continue without crashing
     pass
 
 @app.route('/create-endpoint', methods=['POST'])

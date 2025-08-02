@@ -14,6 +14,20 @@ export async function GET(request: NextRequest) {
   // Create a readable stream for Server-Sent Events
   const stream = new ReadableStream({
     start(controller) {
+      const encoder = new TextEncoder()
+
+      // Helper to safely enqueue without throwing if the controller has been closed
+      const safeEnqueue = (data: string) => {
+        try {
+          controller.enqueue(encoder.encode(data))
+        } catch (_) {
+          /* controller might already be closed – ignore */
+        }
+      }
+
+      // AbortController so we can cancel the backend fetch when we hit the timeout
+      const abortCtrl = new AbortController()
+
       // Connect to the backend EventSource
       const backendUrl = `http://localhost:5000/generate-docs?${new URLSearchParams({
         request: userRequest,
@@ -23,27 +37,28 @@ export async function GET(request: NextRequest) {
       console.log('🔗 Connecting to backend stream:', backendUrl)
 
       // Send initial connection status
-      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({
+      safeEnqueue(`data: ${JSON.stringify({
         type: 'connecting',
         message: 'Connecting to backend...'
-      })}\n\n`))
+      })}\n\n`)
 
       // Use fetch to handle the backend EventSource stream with timeout
       const timeoutId = setTimeout(() => {
-        console.error('❌ Backend connection timeout after 30 seconds')
-        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({
+        console.error('❌ Backend connection timeout after 60 seconds')
+        safeEnqueue(`data: ${JSON.stringify({
           type: 'error',
           error: 'Backend connection timeout. Make sure Flask server is running on http://localhost:5000'
-        })}\n\n`))
-        controller.close()
-      }, 30000) // 30 second timeout
+        })}\n\n`)
+        abortCtrl.abort() // Cancel the fetch; the catch handler will close the stream
+      }, 60000) // 60-second timeout
 
       fetch(backendUrl, {
         method: 'GET',
         headers: {
           'Accept': 'text/event-stream',
           'Cache-Control': 'no-cache'
-        }
+        },
+        signal: abortCtrl.signal
       })
         .then(async (response) => {
           clearTimeout(timeoutId)
@@ -73,7 +88,7 @@ export async function GET(request: NextRequest) {
                 console.log('✅ Stream completed')
                 // Process any remaining buffer content
                 if (buffer.trim()) {
-                  controller.enqueue(new TextEncoder().encode(buffer))
+                  safeEnqueue(buffer)
                 }
                 break
               }
@@ -89,7 +104,7 @@ export async function GET(request: NextRequest) {
               while (eventEnd !== -1) {
                 const eventData = buffer.slice(eventStart, eventEnd + 2)
                 // Forward the complete event
-                controller.enqueue(new TextEncoder().encode(eventData))
+                safeEnqueue(eventData)
                 
                 // Move to next event
                 eventStart = eventEnd + 2
@@ -102,10 +117,10 @@ export async function GET(request: NextRequest) {
           } catch (error) {
             console.error('❌ Stream error:', error)
             const errorMessage = error instanceof Error ? error.message : 'Unknown stream error'
-            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({
+            safeEnqueue(`data: ${JSON.stringify({
               type: 'error',
               error: errorMessage
-            })}\n\n`))
+            })}\n\n`)
           } finally {
             reader.releaseLock()
             controller.close()
@@ -123,7 +138,7 @@ export async function GET(request: NextRequest) {
             }
           }
           
-          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({
+          safeEnqueue(`data: ${JSON.stringify({
             type: 'error',
             error: errorMessage,
             troubleshooting: {
@@ -131,7 +146,7 @@ export async function GET(request: NextRequest) {
               'Check port': 'Verify Flask is on port 5000',
               'Check CORS': 'Flask should allow CORS from frontend'
             }
-          })}\n\n`))
+          })}\n\n`)
           controller.close()
         })
     }
